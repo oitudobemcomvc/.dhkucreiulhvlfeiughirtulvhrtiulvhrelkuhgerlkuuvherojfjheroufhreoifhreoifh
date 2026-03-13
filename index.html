@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IA Vision Acessível</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .ai-active {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+            border-color: #3b82f6;
+        }
+        .btn-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .btn-hover:active { transform: scale(0.95); }
+        
+        #webcam {
+            filter: contrast(1.1) brightness(1.1);
+            transform: scaleX(-1); /* Mirror effect */
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4 md:p-8">
+
+    <header class="w-full max-w-2xl mb-8 flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-slate-800 tracking-tight">IA Vision</h1>
+            <p class="text-slate-500 font-medium">Assistente de Acessibilidade</p>
+        </div>
+        <div id="model-status" class="px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest bg-amber-100 text-amber-600 animate-pulse">
+            Carregando IA...
+        </div>
+    </header>
+
+    <main class="w-full max-w-2xl space-y-6">
+        
+        <div class="relative group">
+            <div class="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+            <div class="relative glass rounded-3xl overflow-hidden shadow-2xl aspect-video">
+                <video id="webcam" autoplay muted playsinline class="w-full h-full object-cover"></video>
+                
+                <div id="scan-line" class="absolute inset-0 border-t-2 border-blue-400 opacity-0 transition-opacity"></div>
+            </div>
+        </div>
+
+        <div class="glass rounded-3xl p-8 text-center shadow-lg border-b-4 border-blue-500">
+            <h2 class="text-xs uppercase font-bold text-slate-400 mb-2 tracking-widest">A IA identificou:</h2>
+            <p id="prediction-text" class="text-4xl font-bold text-slate-800 leading-tight">...</p>
+        </div>
+
+        <button onclick="identifyObject()" 
+                class="btn-hover w-full bg-slate-900 hover:bg-blue-700 text-white rounded-3xl py-8 flex flex-col items-center justify-center shadow-2xl group focus:ring-4 focus:ring-blue-400 outline-none">
+            <span class="text-4xl mb-2 group-hover:scale-110 transition">🔍</span>
+            <span class="text-xl font-bold uppercase tracking-wider">Analisar Ambiente</span>
+        </button>
+
+        <div class="grid grid-cols-2 gap-4">
+            <button onclick="quickTalk('Preciso de água, por favor')" class="glass btn-hover p-6 rounded-3xl flex flex-col items-center border-b-4 border-cyan-400">
+                <span class="text-4xl mb-2">💧</span>
+                <span class="font-bold text-slate-700 uppercase text-sm">Água</span>
+            </button>
+            <button onclick="quickTalk('Estou me sentindo sobrecarregado, preciso de silêncio')" class="glass btn-hover p-6 rounded-3xl flex flex-col items-center border-b-4 border-purple-400">
+                <span class="text-4xl mb-2">🎧</span>
+                <span class="font-bold text-slate-700 uppercase text-sm">Calma</span>
+            </button>
+        </div>
+    </main>
+
+    <footer class="mt-auto py-8 text-slate-400 text-sm font-medium">
+        Processamento local privado • TensorFlow.js
+    </footer>
+
+    <script>
+        let model = undefined;
+        const video = document.getElementById('webcam');
+        const predictionText = document.getElementById('prediction-text');
+        const statusEl = document.getElementById('model-status');
+        const synth = window.speechSynthesis;
+
+        async function init() {
+            try {
+                // Setup Webcam
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment", width: 1280, height: 720 } 
+                });
+                video.srcObject = stream;
+
+                // Load IA
+                model = await mobilenet.load();
+                
+                statusEl.innerText = "IA Pronta";
+                statusEl.classList.replace('bg-amber-100', 'bg-green-100');
+                statusEl.classList.replace('text-amber-600', 'text-green-600');
+                statusEl.classList.remove('animate-pulse');
+                
+                speak("Sistema carregado. Pronto para ajudar.");
+            } catch (err) {
+                predictionText.innerText = "Erro ao iniciar câmera.";
+                statusEl.innerText = "Erro";
+            }
+        }
+
+        async function identifyObject() {
+            if (!model) return;
+
+            predictionText.innerText = "Analisando...";
+            predictionText.classList.add('animate-pulse');
+            
+            // Efeito visual de scan
+            document.getElementById('scan-line').classList.replace('opacity-0', 'opacity-100');
+
+            const predictions = await model.classify(video);
+            const result = predictions[0].className.split(',')[0];
+            
+            // Tradução simplificada para alguns termos comuns
+            const traducoes = {
+                'notebook': 'Notebook', 'laptop': 'Computador', 'cellphone': 'Celular',
+                'mobile phone': 'Celular', 'water bottle': 'Garrafa', 'cup': 'Copo',
+                'coffee mug': 'Caneca', 'remote': 'Controle remoto', 'glasses': 'Óculos',
+                'keyboard': 'Teclado', 'mouse': 'Mouse', 'pen': 'Caneta'
+            };
+
+            const finalResult = traducoes[result.toLowerCase()] || result;
+
+            setTimeout(() => {
+                predictionText.classList.remove('animate-pulse');
+                predictionText.innerText = finalResult;
+                document.getElementById('scan-line').classList.replace('opacity-100', 'opacity-0');
+                speak("Eu identifiquei: " + finalResult);
+            }, 600);
+        }
+
+        function speak(text) {
+            synth.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'pt-BR';
+            utterance.rate = 0.9;
+            synth.speak(utterance);
+        }
+
+        function quickTalk(msg) {
+            speak(msg);
+            predictionText.innerText = msg;
+        }
+
+        init();
+    </script>
+</body>
+</html>
